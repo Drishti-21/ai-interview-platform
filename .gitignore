@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+
+# Local environment variables (NEVER upload these)
+.env
+.env.local
+.env.*.local
+
+# Project-specific local storage (DO NOT upload)
+.interview-data/
+
+# Vercel local files
+.vercel/
+
+# Misc system files
+.DS_Store
+Thumbs.db
