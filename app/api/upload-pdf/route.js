@@ -15,9 +15,6 @@ export async function POST(request) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-
-    // Vercel-safe: no PDF extraction performed
     const extractedText = "Resume uploaded successfully.";
 
     const token = randomUUID().replace(/-/g, "");
@@ -31,11 +28,7 @@ export async function POST(request) {
       timestamp: Date.now(),
     });
 
-    // -------------------------------
-    // FIXED BASE URL LOGIC
-    // -------------------------------
     let baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
-
     if (!baseUrl) {
       if (process.env.VERCEL_URL) {
         baseUrl = `https://${process.env.VERCEL_URL}`;
@@ -43,9 +36,7 @@ export async function POST(request) {
         baseUrl = "http://localhost:3000";
       }
     }
-    // -------------------------------
 
-    // Send the email
     await fetch(`${baseUrl}/api/send-email`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -60,7 +51,6 @@ export async function POST(request) {
       message: "Invite sent.",
       token,
     });
-
   } catch (error) {
     console.error("UPLOAD ERROR:", error);
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });
