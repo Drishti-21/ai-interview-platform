@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { saveInterviewData } from "../../../lib/storage.js";
 import { randomUUID } from "crypto";
+import { PDFDocument } from "pdf-lib";
 
 export async function POST(request) {
   try {
@@ -16,51 +17,55 @@ export async function POST(request) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
     }
 
-    // For now, use a placeholder text - PDF parsing will be added later
-    const extractedText = `RESUME_PLACEHOLDER - File uploaded: ${file.name} (${file.size} bytes)
-    
-This is placeholder resume text for testing purposes. The system has successfully received a PDF file and will proceed with the interview process. 
+    // Convert uploaded file to buffer
+    const buffer = Buffer.from(await file.arrayBuffer());
 
-Key Skills: JavaScript, React, Node.js, Python, SQL, Git
-Experience: 3+ years in software development
-Education: Computer Science degree
-Projects: Built web applications, APIs, and databases`;
+    // Load PDF using pdf-lib
+    const pdfDoc = await PDFDocument.load(buffer);
+    const pages = pdfDoc.getPages();
 
-    console.log("File uploaded successfully:", file.name, file.size + " bytes");
+    let extractedText = "";
 
-    const token = randomUUID().replace(/-/g, "");
+    for (const page of pages) {
+      try {
+        const textContent = await page.getTextContent();
+        extractedText += textContent.items.map((i) => i.str).join(" ") + " ";
+      } catch (err) {
+        extractedText += "";
+      }
+    }
+
+    if (!extractedText.trim()) {
+      extractedText = "Unable to extract text from this PDF. Please upload a text-based PDF.";
+    }
+
+    const cvText = extractedText;
     const numQuestions = 6;
+    const token = randomUUID().replace(/-/g, "");
 
-    await saveInterviewData(token, {
-      resumeText: extractedText,
+    // Save data ONLY in memory (Vercel-safe)
+    saveInterviewData(token, {
+      cvText,
       jdText: jd,
       email,
       numQuestions,
-      timestamp: Date.now(),
     });
 
-    // Send the email
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_BASE_URL}/api/send-email`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          link: `${process.env.NEXT_PUBLIC_BASE_URL}/interview/${token}`,
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      return NextResponse.json({ error: "Failed to send email" }, { status: 500 });
-    }
+    // Send email
+    await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/send-email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        link: `${process.env.NEXT_PUBLIC_BASE_URL}/interview/${token}`,
+      }),
+    });
 
     return NextResponse.json({
       success: true,
-      message: "Invite sent successfully.",
-      token,
+      message: "Invite sent.",
     });
+
   } catch (error) {
     console.error("UPLOAD ERROR:", error);
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });
