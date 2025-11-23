@@ -3,12 +3,10 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { saveInterviewData } from "../../../lib/storage.js";
 import { randomUUID } from "crypto";
-import { PDFDocument } from "pdf-lib";
 
 export async function POST(request) {
   try {
     const form = await request.formData();
-
     const file = form.get("file");
     const jd = form.get("jd") || "";
     const email = form.get("email");
@@ -17,35 +15,14 @@ export async function POST(request) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
     }
 
-    // Convert uploaded file to buffer
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    // Extract PDF text (simple safe extraction)
-    let extractedText = "";
-    try {
-      const pdfDoc = await PDFDocument.load(buffer);
-      const pages = pdfDoc.getPages();
-      for (const page of pages) {
-        try {
-          const content = await page.getTextContent?.();
-          const text = content?.items?.map((i) => i.str).join(" ") || "";
-          extractedText += text + " ";
-        } catch {
-          extractedText += "";
-        }
-      }
-    } catch {
-      extractedText = "";
-    }
-
-    if (!extractedText.trim()) {
-      extractedText = "Unable to extract text from this PDF.";
-    }
+    // Vercel-safe: no PDF extraction performed
+    const extractedText = "Resume uploaded successfully.";
 
     const token = randomUUID().replace(/-/g, "");
     const numQuestions = 6;
 
-    // SAVE ONLY IN MEMORY (Vercel safe)
     saveInterviewData(token, {
       resumeText: extractedText,
       jdText: jd,
@@ -54,13 +31,27 @@ export async function POST(request) {
       timestamp: Date.now(),
     });
 
-    // SEND EMAIL
-    await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/send-email`, {
+    // -------------------------------
+    // FIXED BASE URL LOGIC
+    // -------------------------------
+    let baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+
+    if (!baseUrl) {
+      if (process.env.VERCEL_URL) {
+        baseUrl = `https://${process.env.VERCEL_URL}`;
+      } else {
+        baseUrl = "http://localhost:3000";
+      }
+    }
+    // -------------------------------
+
+    // Send the email
+    await fetch(`${baseUrl}/api/send-email`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         email,
-        link: `${process.env.NEXT_PUBLIC_BASE_URL}/interview/${token}`,
+        link: `${baseUrl}/interview/${token}`,
       }),
     });
 
@@ -71,7 +62,7 @@ export async function POST(request) {
     });
 
   } catch (error) {
-    console.error("UPLOAD-PDF ERROR:", error);
+    console.error("UPLOAD ERROR:", error);
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });
   }
 }
