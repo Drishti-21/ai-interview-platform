@@ -20,38 +20,41 @@ export async function POST(request) {
     // Convert uploaded file to buffer
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    // Load PDF using pdf-lib
-    const pdfDoc = await PDFDocument.load(buffer);
-    const pages = pdfDoc.getPages();
-
+    // Extract PDF text (simple safe extraction)
     let extractedText = "";
-
-    for (const page of pages) {
-      try {
-        const textContent = await page.getTextContent();
-        extractedText += textContent.items.map((i) => i.str).join(" ") + " ";
-      } catch (err) {
-        extractedText += "";
+    try {
+      const pdfDoc = await PDFDocument.load(buffer);
+      const pages = pdfDoc.getPages();
+      for (const page of pages) {
+        try {
+          const content = await page.getTextContent?.();
+          const text = content?.items?.map((i) => i.str).join(" ") || "";
+          extractedText += text + " ";
+        } catch {
+          extractedText += "";
+        }
       }
+    } catch {
+      extractedText = "";
     }
 
     if (!extractedText.trim()) {
-      extractedText = "Unable to extract text from this PDF. Please upload a text-based PDF.";
+      extractedText = "Unable to extract text from this PDF.";
     }
 
-    const cvText = extractedText;
-    const numQuestions = 6;
     const token = randomUUID().replace(/-/g, "");
+    const numQuestions = 6;
 
-    // Save data ONLY in memory (Vercel-safe)
+    // SAVE ONLY IN MEMORY (Vercel safe)
     saveInterviewData(token, {
-      cvText,
+      resumeText: extractedText,
       jdText: jd,
       email,
       numQuestions,
+      timestamp: Date.now(),
     });
 
-    // Send email
+    // SEND EMAIL
     await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/send-email`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -64,10 +67,11 @@ export async function POST(request) {
     return NextResponse.json({
       success: true,
       message: "Invite sent.",
+      token,
     });
 
   } catch (error) {
-    console.error("UPLOAD ERROR:", error);
+    console.error("UPLOAD-PDF ERROR:", error);
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });
   }
 }
